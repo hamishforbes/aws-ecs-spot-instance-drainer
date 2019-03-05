@@ -1,6 +1,5 @@
 FROM golang:1.9 as binary
-MAINTAINER kmtruckenmiller@gmail.com
-WORKDIR /go/src/github.com/ktruckenmiller/spot-checker
+WORKDIR /go/src/spot-checker
 COPY . .
 RUN go get -v
 ARG GOOS
@@ -14,5 +13,5 @@ RUN apk add -U --no-cache ca-certificates
 FROM scratch
 WORKDIR /
 COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=binary /go/src/github.com/ktruckenmiller/spot-checker/spot_term_watcher /bin/
+COPY --from=binary /go/src/spot-checker/spot_term_watcher /bin/
 ENTRYPOINT ["/bin/spot_term_watcher"]
