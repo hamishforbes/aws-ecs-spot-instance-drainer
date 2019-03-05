@@ -25,7 +25,7 @@ func getContainerInstance() instance {
   }
   containerInstance := instance{}
 
-  req, err := http.NewRequest(http.MethodGet, "http://0.0.0.0:51678/v1/metadata", nil)
+  req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:51678/v1/metadata", nil)
   if err != nil {
       log.Fatal(err)
   }
