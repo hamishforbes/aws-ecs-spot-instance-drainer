@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -74,11 +75,36 @@ func isStopping() bool {
 		log.Fatal(getErr)
 	}
 
-	fmt.Println("Checking spot status...")
+	return res.StatusCode == 200
+}
+
+func webhook(url string) bool {
+	fmt.Printf("Triggering webhook: %s\n", url)
+
+	client := http.Client{
+		Timeout: time.Second * 60, // Maximum of 2 secs
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer([]byte(os.Getenv("WEBHOOK_DATA"))))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	res, getErr := client.Do(req)
+	if getErr != nil {
+		log.Fatal(getErr)
+	}
+
+	fmt.Printf("Webhook response: %s\n", res.Status)
 	return res.StatusCode == 200
 }
 
 func drain(containerInstance instance) {
+	fmt.Printf("Draining %s\n", containerInstance.Arn)
+	// drain this one
 	// ecs stuff
 	svc := ecs.New(session.New())
 
@@ -101,11 +127,6 @@ func drain(containerInstance instance) {
 }
 
 func writePrometheusMetric(metric string, val uint8) {
-	enabled := os.Getenv("USE_PROMETHEUS")
-	if enabled == "" {
-		return
-	}
-
 	fmt.Printf("Writing Prometheus Metric: %s %d\n", metric, val)
 
 	message := []byte(fmt.Sprintf("%s %d\n", metric, val))
@@ -123,7 +144,6 @@ func writePrometheusMetric(metric string, val uint8) {
 }
 
 func main() {
-	writePrometheusMetric("ecs_spot_instance_terminating", 0)
 
 	containerInstance := getContainerInstance()
 
@@ -136,15 +156,35 @@ func main() {
 	fmt.Printf("Found ECS Container Instance %s\n", containerInstance.Arn)
 	fmt.Printf("on the %s cluster.\n", containerInstance.Cluster)
 
+	webhookURL := os.Getenv("WEBHOOK_URL")
+	mockTerminate := (os.Getenv("MOCK_TERMINATE") != "")
+	disableDrain := (os.Getenv("DISABLE_DRAIN") != "")
+	prometheusEnabled := (os.Getenv("USE_PROMETHEUS") != "")
+
+	fmt.Printf("Prometheus:  %t\n", prometheusEnabled)
+	fmt.Printf("Mock Terminate:  %t\n", mockTerminate)
+	fmt.Printf("Disable Draining:  %t\n", disableDrain)
+	fmt.Printf("Webhook URL:  %s\n", webhookURL)
+
+	if prometheusEnabled {
+		writePrometheusMetric("ecs_spot_instance_terminating", 0)
+	}
+
 	for true {
-		if isStopping() {
+		if mockTerminate || isStopping() {
+			fmt.Println("Spot instance is terminating.")
 
-			writePrometheusMetric("ecs_spot_instance_terminating", 1)
+			if prometheusEnabled {
+				writePrometheusMetric("ecs_spot_instance_terminating", 1)
+			}
 
-			fmt.Println("Spot instance is being acted upon. Doing something")
-			fmt.Printf("Drain this %s\n", containerInstance.Arn)
-			// drain this one
-			drain(containerInstance)
+			if webhookURL != "" {
+				webhook(webhookURL)
+			}
+
+			if !disableDrain {
+				drain(containerInstance)
+			}
 
 			os.Exit(0)
 		}
