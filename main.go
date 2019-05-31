@@ -144,18 +144,6 @@ func writePrometheusMetric(metric string, val uint8) {
 }
 
 func main() {
-
-	containerInstance := getContainerInstance()
-
-	for containerInstance == (instance{}) {
-		fmt.Println("Cannot communicate with ECS Agent. Retrying...")
-		time.Sleep(time.Second * 5)
-		containerInstance = getContainerInstance()
-	}
-
-	fmt.Printf("Found ECS Container Instance %s\n", containerInstance.Arn)
-	fmt.Printf("on the %s cluster.\n", containerInstance.Cluster)
-
 	webhookURL := os.Getenv("WEBHOOK_URL")
 	mockTerminate := (os.Getenv("MOCK_TERMINATE") != "")
 	disableDrain := (os.Getenv("DISABLE_DRAIN") != "")
@@ -165,6 +153,21 @@ func main() {
 	fmt.Printf("Mock Terminate:  %t\n", mockTerminate)
 	fmt.Printf("Disable Draining:  %t\n", disableDrain)
 	fmt.Printf("Webhook URL:  %s\n", webhookURL)
+
+	containerInstance := instance{}
+
+	if !disableDrain {
+		containerInstance := getContainerInstance()
+
+		for containerInstance == (instance{}) {
+			fmt.Println("Cannot communicate with ECS Agent. Retrying...")
+			time.Sleep(time.Second * 5)
+			containerInstance = getContainerInstance()
+		}
+
+		fmt.Printf("Found ECS Container Instance %s\n", containerInstance.Arn)
+		fmt.Printf("on the %s cluster.\n", containerInstance.Cluster)
+	}
 
 	if prometheusEnabled {
 		writePrometheusMetric("ecs_spot_instance_terminating", 0)
