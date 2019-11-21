@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -78,25 +78,17 @@ func isStopping() bool {
 	return res.StatusCode == 200
 }
 
-func webhook(url string) bool {
-	fmt.Printf("Triggering webhook: %s\n", url)
+func webhook(hookurl string) bool {
+	fmt.Printf("Triggering webhook: %s\n", hookurl)
+	webhookData := os.Getenv("WEBHOOK_DATA")
 
-	client := http.Client{
-		Timeout: time.Second * 60, // Maximum of 2 secs
-	}
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer([]byte(os.Getenv("WEBHOOK_DATA"))))
-
+	res, err := http.PostForm(hookurl, url.Values{"host_config_key": {webhookData}})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	res, getErr := client.Do(req)
-	if getErr != nil {
-		log.Fatal(getErr)
-	}
+	defer res.Body.Close()
+	ioutil.ReadAll(res.Body)
 
 	fmt.Printf("Webhook response: %s\n", res.Status)
 	return res.StatusCode == 200
@@ -189,7 +181,7 @@ func main() {
 				drain(containerInstance)
 			}
 
-			os.Exit(0)
+			time.Sleep(time.Second * 60)
 		}
 
 		time.Sleep(time.Second * 5)
